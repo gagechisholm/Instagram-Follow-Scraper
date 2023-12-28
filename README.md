@@ -8,8 +8,19 @@ target_user --> the username of the account you wish to check status of
 if os.path.isfile --> insert path to where your file is stored, only change what is marked to change
 os.remove --> insert path to where your file is stored, only change what is marked to change
 
+Ignore error responses outputting html/css in the console, the program will handle exceptions within 30 seconds
 The first time you run it will initialize a database with the current data
 Everytime you run it after that it will tell you in the terminal what data has changed
-You must be following the user for this code to work properly, it does not work on private accounts
+You must be following the target user for this code to work properly unless the users account is public
+
+Fixes/Improvements:
+- cookies now clear using relative path
+- database initializes using relative path
+- improved exception handling
+- conventional connection handling
+- bot now logs out when program is finished executing
+
+Issues:
+InstaBot sometimes grabs duplicate user ids/leaves out user ids in the _get_followers_following(): function, this makes the program suboptimal
 
 The information provided in this program is for instructional purposes only, do not abuse this program.
