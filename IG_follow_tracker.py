@@ -1,24 +1,34 @@
-import os
 import instabot
 import sqlite3
+import os
 
 # Users and Password
 login_username = 'insert_username_here'
 login_password = 'insert_password_here'
 target_user = 'insert_target_user_here'
 
-# Deletes old cookies if they exist
-if os.path.isfile(f"  -->insert/path/to/file/here<--  /config/{login_username}_uuid_and_cookie.json"): # Delete spaces and arrows once inserted
-    os.remove(f"  -->insert/path/to/file/here<--  /config/{login_username}_uuid_and_cookie.json") # Delete spaces and arrows once inserted
-    
-# Initialize or connect sqlite database
-db_path = 'insta_followers.db'
+# Get the current working directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Initialize or connect sqlite database with a relative path
+db_name = 'insta_followers.db'
+db_path = os.path.join(current_dir, db_name)
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
+
+# Deletes old cookies if they exist using a relative path
+cookie_file = f"{login_username}_uuid_and_cookie.json"
+cookie_path = os.path.join(current_dir, 'config', cookie_file)
+if os.path.isfile(cookie_path):
+    os.remove(cookie_path)
 
 # Create an instance of the InstaBot and login
 bot = instabot.Bot()
 bot.login(username=login_username, password=login_password)
+
+# Drops old data if exists
+cursor.execute('DROP TABLE IF EXISTS new_followers_id')
+cursor.execute('DROP TABLE IF EXISTS new_following_id')
 
 # Create necessary tables if they don't exist
 cursor.execute('''
@@ -50,7 +60,7 @@ cursor.execute('''
                 )
             ''')
 
-# Function to get followers and following from Instagram API
+# Helper function of store_db to get followers and following from Instagram API
 
 
 def _get_followers_following():
@@ -61,7 +71,7 @@ def _get_followers_following():
 # Function to store followers and following data into the database
 
 
-def _store_db(follower_db_name, following_db_name):
+def store_db(follower_db_name, following_db_name):
     followers_by_id, following_by_id = _get_followers_following()
 
     for follower_id in followers_by_id:
@@ -76,8 +86,7 @@ def _store_db(follower_db_name, following_db_name):
 # Function to compare new followers/following with existing data
 
 
-def _get_compare_follow():
-    _store_db('new_followers_id', 'new_following_id')
+def get_compare_follow():
 
     cursor.execute('''
         SELECT identity FROM new_followers_id
@@ -112,7 +121,7 @@ def _get_compare_follow():
 # Function to convert IDs to usernames using Instagram API
 
 
-def _convert_id_to_name(id_list):
+def convert_id_to_name(id_list):
     name_list = []
     for id in id_list:
         name_list.append(bot.get_username_from_user_id(id))
@@ -121,7 +130,7 @@ def _convert_id_to_name(id_list):
 # Function to update the database after comparisons
 
 
-def _update_db():
+def update_db():
     cursor.execute('DROP TABLE IF EXISTS followers_id')
     cursor.execute('DROP TABLE IF EXISTS following_id')
     cursor.execute('ALTER TABLE new_followers_id RENAME TO followers_id')
@@ -132,30 +141,51 @@ def _update_db():
 
 
 def find_changes():
-    cursor.execute(f"SELECT COUNT(*) FROM followers_id;")
-    row_count = cursor.fetchone()[0]
+    try:
+        cursor.execute(f"SELECT COUNT(*) FROM followers_id;")
+        row_count = cursor.fetchone()[0]
 
-    if row_count == 0:
-        print('First run detected. Initializing Database')
-        _store_db('followers_id', 'following_id')
-        print(f"Database Initialized, run again to see changes.")
+        print(f"Row count in followers_id table: {row_count}")
 
-    else:
-        new_followers, new_following, unfollowed, unfollowed_by = _get_compare_follow()
-        new_followers_by_name = _convert_id_to_name(new_followers)
-        new_following_by_name = _convert_id_to_name(new_following)
-        unfollowed_by_name = _convert_id_to_name(unfollowed)
-        unfollowed_by_by_name = _convert_id_to_name(unfollowed_by)
+        if row_count == 0:
+            print('First run detected. Initializing Database')
+            store_db('followers_id', 'following_id')
+            print(f"Database Initialized, run again to see changes.")
+        else:
+            store_db('new_followers_id', 'new_following_id')
+            new_followers, new_following, unfollowed, unfollowed_by = get_compare_follow()
+            new_followers_by_name = convert_id_to_name(new_followers)
+            new_following_by_name = convert_id_to_name(new_following)
+            unfollowed_by_name = convert_id_to_name(unfollowed)
+            unfollowed_by_by_name = convert_id_to_name(unfollowed_by)
 
-        print('New Followers: ', new_followers_by_name)
-        print('New Following: ', new_following_by_name)
-        print('Unfollowed: ', unfollowed_by_name)
-        print('Unfollowed By: ', unfollowed_by_by_name)
-        _update_db()
+            print('New Followers: ', new_followers_by_name)
+            print('New Following: ', new_following_by_name)
+            print('Unfollowed: ', unfollowed_by_name)
+            print('Unfollowed By: ', unfollowed_by_by_name)
+
+            update_db()
+    except Exception as e:
+        print(f'An error has occurred: {e}. Logging out.')
+        bot.logout()
+
+# Close the database connection and logs out of the account
+
+
+def close_connections():
+    try:
+        conn.commit()
+        conn.close()
+        bot.logout()
+    except Exception as e:
+        print(f'Error while closing connections: {e}')
 
 
 # Call function to find and display changes
-find_changes()
+try:
+    find_changes()
+except Exception as e:
+    print(f'Error in main process: {e}')
+    bot.logout()
 
-# Close the database connection
-conn.close()
+close_connections()
